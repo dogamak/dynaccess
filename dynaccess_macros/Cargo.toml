@@ -1,0 +1,16 @@
+[package]
+name = "dynaccess_macros"
+version = "0.1.0"
+authors = ["Mitja Karhusaari <monttu300@gmail.com>"]
+
+[lib]
+proc-macro = true
+
+[workspace]
+members = [ "../dynaccess_tests", "../dynaccess_traits" ]
+
+[dependencies]
+regex = "*"
+lazy_static = "*"
+syn = "*"
+quote = "*"

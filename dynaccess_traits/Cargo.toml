@@ -1,0 +1,6 @@
+[package]
+name = "dynaccess_traits"
+version = "0.1.0"
+authors = ["Mitja Karhusaari <monttu300@gmail.com>"]
+
+[dependencies]

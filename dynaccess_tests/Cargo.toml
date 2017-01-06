@@ -1,0 +1,8 @@
+[package]
+name = "dynaccess_tests"
+version = "0.1.0"
+authors = ["Mitja Karhusaari <monttu300@gmail.com>"]
+
+[dependencies]
+dynaccess_macros = { path = "../dynaccess_macros" }
+dynaccess_traits = { path = "../dynaccess_traits" }
