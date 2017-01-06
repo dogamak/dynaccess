@@ -1,4 +1,4 @@
-# dynaccess
+# dynaccess [![Build Status](https://travis-ci.org/dogamak/dynaccess.svg?branch=master)](https://travis-ci.org/dogamak/dynaccess)
 This crate provides `#[derive(Dynaccess)]` that implements dynamic accessor
 methods for the struct using `FieldAccessors` trait in `dynaccess_traits`.
 A module containing unit structs of which each represent one field in the
