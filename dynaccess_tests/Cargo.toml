@@ -2,6 +2,7 @@
 name = "dynaccess_tests"
 version = "0.1.0"
 authors = ["Mitja Karhusaari <monttu300@gmail.com>"]
+#workspace = "../dynaccess_macros"
 
 [dependencies]
 dynaccess_macros = { path = "../dynaccess_macros" }

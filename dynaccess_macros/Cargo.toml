@@ -6,8 +6,8 @@ authors = ["Mitja Karhusaari <monttu300@gmail.com>"]
 [lib]
 proc-macro = true
 
-[workspace]
-members = [ "../dynaccess_tests", "../dynaccess_traits" ]
+#[workspace]
+#members = [ "../dynaccess_tests", "../dynaccess_traits" ]
 
 [dependencies]
 regex = "*"
