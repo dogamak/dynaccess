@@ -9,10 +9,14 @@ extern crate regex;
 
 use proc_macro::TokenStream;
 use regex::{Regex, Captures};
-use syn::{MetaItem, NestedMetaItem, Ident, Lit, Body, VariantData};
+use syn::{MetaItem, NestedMetaItem, Ident, Lit, Body, VariantData, Attribute};
 
 
-fn create_field_items(input: &syn::MacroInput, field: &syn::Field) -> quote::Tokens {
+fn create_field_items(input: &syn::MacroInput,
+                      field_attrs: &Vec<Attribute>,
+                      field: &syn::Field)
+                      -> quote::Tokens
+{
     lazy_static! {
         static ref REGEX_SNAKE_CASE: Regex = Regex::new("(?:^|_)(.)").unwrap();
     }
@@ -32,6 +36,7 @@ fn create_field_items(input: &syn::MacroInput, field: &syn::Field) -> quote::Tok
     let field_const_name = Ident::new(field_name_camel_case);
     
     quote!(
+        #( #field_attrs )*
         pub struct #field_struct_name;
 
         pub const #field_const_name: #field_struct_name = #field_struct_name;
@@ -55,7 +60,7 @@ fn create_field_items(input: &syn::MacroInput, field: &syn::Field) -> quote::Tok
 }
 
 fn filter_dynaccess_attrs<'a, I>(attrs: I) -> Box<Iterator<Item=syn::NestedMetaItem> + 'a>
-    where I: Iterator<Item=&'a syn::Attribute> + 'a,
+    where I: Iterator<Item=&'a Attribute> + 'a,
 {
     Box::new(attrs.filter_map(|attr| {
         if let MetaItem::List(ref ident, ref attrs) = attr.value {
@@ -72,16 +77,35 @@ pub fn dynaccess(input: TokenStream) -> TokenStream {
     let s = input.to_string();
     let ast = syn::parse_macro_input(&s).expect("failed to parse macro input");
 
-    let mut mod_name = "field".to_string();
-
     let attrs = filter_dynaccess_attrs(ast.attrs.iter());
 
+    let mut mod_name = "field".to_string();
+    let mut field_attrs = vec![];
+    
     for attr in attrs {
         match attr {
             NestedMetaItem::MetaItem(MetaItem::NameValue(ref name, Lit::Str(ref value, _)))
                 if name.to_string() == "module".to_string() =>
             {
                 mod_name = value.to_string();
+            },
+            NestedMetaItem::MetaItem(MetaItem::List(ref name, ref attrs))
+                if name.to_string() == "field_attrs".to_string() =>
+            {
+                let mut new_attrs = attrs.iter().filter_map(|item| {
+                    match item {
+                        &NestedMetaItem::MetaItem(ref item) => Some(item),
+                        _ => None
+                    }
+                }).map(|item| {
+                    Attribute {
+                        style: syn::AttrStyle::Outer,
+                        is_sugared_doc: false,
+                        value: item.clone()
+                    }
+                }).collect();
+
+                field_attrs.append(&mut new_attrs);
             },
             _ => ()
         }
@@ -90,7 +114,9 @@ pub fn dynaccess(input: TokenStream) -> TokenStream {
     let mod_name = Ident::new(mod_name);
     
     let field_gens = if let Body::Struct(VariantData::Struct(ref fields)) = ast.body {
-        fields.iter().map(|field| create_field_items(&ast, field)).collect::<Vec<_>>()
+        fields.iter().map(|field| {
+            create_field_items(&ast, &field_attrs, field)
+        }).collect::<Vec<_>>()
     } else {
         panic!("#[derive(FieldModule)] is only defined for structs");
     };
