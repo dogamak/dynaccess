@@ -52,6 +52,7 @@ mod tests {
         pub name: String
     }
 
+    #[test]
     pub fn test_field_attrs() {
         let s = Sheep {
             name: "Dolly".to_string()
