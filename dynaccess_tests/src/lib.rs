@@ -60,4 +60,24 @@ mod tests {
 
         assert_eq!(s.get(sheep_field::Name.clone()), &"Dolly".to_string());
     }
+
+    #[derive(Dynaccess)]
+    #[dynaccess(module="snowflake_field")]
+    struct Snowflake {
+        #[dynaccess(field_attrs(derive(Clone)))]
+        pub id: usize,
+        #[dynaccess(field_attrs(derive(Debug)))]
+        pub unique: bool
+    }
+
+    #[test]
+    pub fn test_individual_field_attrs() {
+        let snow = Snowflake {
+            id: 23956532,
+            unique: true
+        };
+
+        snowflake_field::Id.clone();
+        println!("{:?}", snowflake_field::Unique);
+    }
 }

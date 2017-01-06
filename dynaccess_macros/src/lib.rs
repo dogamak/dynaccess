@@ -59,6 +59,35 @@ fn create_field_items(input: &syn::MacroInput,
     let field_name = field.ident.clone().unwrap().to_string();
     let field_ident = field.ident.clone();
     let field_type = field.ty.clone();
+    let mut field_attrs = field_attrs.clone();
+    
+    let iter = filter_dynaccess_attrs(field.attrs.iter())
+        .filter_map(|item| match item {
+            NestedMetaItem::MetaItem(item) => Some(item),
+            _ => None,
+        });
+
+    for attr in iter {
+        match attr {
+            MetaItem::List(ref name, ref attrs)
+                if name.to_string() == "field_attrs".to_string() =>
+            {
+                let iter = attrs.iter().filter_map(|item| match item {
+                    &NestedMetaItem::MetaItem(ref item) => Some(item),
+                    _ => None,
+                });
+                
+                for attr in iter {
+                    field_attrs.push(Attribute {
+                        style: syn::AttrStyle::Outer,
+                        is_sugared_doc: false,
+                        value: attr.clone()
+                    });
+                }
+            },
+            _ => ()
+        }
+    }
 
     let field_name_camel_case = REGEX_SNAKE_CASE
         .replace(field_name.as_str(),
