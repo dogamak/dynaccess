@@ -1,4 +1,4 @@
-#![feature(proc_macro, proc_macro_lib, custom_attribute)]
+#![feature(proc_macro, proc_macro_lib)]
 #![recursion_limit = "1024"]
 
 extern crate proc_macro;
