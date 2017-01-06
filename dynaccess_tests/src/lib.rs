@@ -67,17 +67,17 @@ mod tests {
         #[dynaccess(field_attrs(derive(Clone)))]
         pub id: usize,
         #[dynaccess(field_attrs(derive(Debug)))]
-        pub unique: bool
+        pub is_unique: bool
     }
 
     #[test]
     pub fn test_individual_field_attrs() {
         let snow = Snowflake {
             id: 23956532,
-            unique: true
+            is_unique: true
         };
 
         snowflake_field::Id.clone();
-        println!("{:?}", snowflake_field::Unique);
+        println!("{:?}", snowflake_field::IsUnique);
     }
 }

@@ -90,7 +90,7 @@ fn create_field_items(input: &syn::MacroInput,
     }
 
     let field_name_camel_case = REGEX_SNAKE_CASE
-        .replace(field_name.as_str(),
+        .replace_all(field_name.as_str(),
                  |captures: &Captures| {
                      captures.get(1).unwrap().as_str()
                          .to_string().to_uppercase()
