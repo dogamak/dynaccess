@@ -9,7 +9,7 @@ extern crate regex;
 
 use proc_macro::TokenStream;
 use regex::{Regex, Captures};
-use syn::{MetaItem, Ident, Lit, Body, VariantData};
+use syn::{MetaItem, NestedMetaItem, Ident, Lit, Body, VariantData};
 
 
 fn create_field_items(input: &syn::MacroInput, field: &syn::Field) -> quote::Tokens {
@@ -54,21 +54,39 @@ fn create_field_items(input: &syn::MacroInput, field: &syn::Field) -> quote::Tok
     )
 }
 
-#[proc_macro_derive(FieldModule)]
-pub fn field_module(input: TokenStream) -> TokenStream {
+fn filter_dynaccess_attrs<'a, I>(attrs: I) -> Box<Iterator<Item=syn::NestedMetaItem> + 'a>
+    where I: Iterator<Item=&'a syn::Attribute> + 'a,
+{
+    Box::new(attrs.filter_map(|attr| {
+        if let MetaItem::List(ref ident, ref attrs) = attr.value {
+                if ident.to_string() == "dynaccess".to_string() {
+                    return Some(attrs.clone());
+                }
+            }
+        None
+    }).flat_map(|a| a))
+}
+
+#[proc_macro_derive(Dynaccess)]
+pub fn dynaccess(input: TokenStream) -> TokenStream {
     let s = input.to_string();
     let ast = syn::parse_macro_input(&s).expect("failed to parse macro input");
 
     let mut mod_name = "field".to_string();
 
-    for attr in ast.attrs.iter() {
-        if let MetaItem::NameValue(ref name, Lit::Str(ref value, _)) = attr.value {
-            if name.to_string() == "field_module".to_string() {
-                mod_name = value.clone();
-            }
+    let attrs = filter_dynaccess_attrs(ast.attrs.iter());
+
+    for attr in attrs {
+        match attr {
+            NestedMetaItem::MetaItem(MetaItem::NameValue(ref name, Lit::Str(ref value, _)))
+                if name.to_string() == "module".to_string() =>
+            {
+                mod_name = value.to_string();
+            },
+            _ => ()
         }
     }
-
+    
     let mod_name = Ident::new(mod_name);
     
     let field_gens = if let Body::Struct(VariantData::Struct(ref fields)) = ast.body {
