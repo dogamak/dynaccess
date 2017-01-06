@@ -151,8 +151,6 @@ pub fn dynaccess(input: TokenStream) -> TokenStream {
             #( #field_gens )*
         }
     );
-    
-    println!("{:?}", gen);
 
     gen.parse().expect("failed to stringify the syntax tree")
 }
