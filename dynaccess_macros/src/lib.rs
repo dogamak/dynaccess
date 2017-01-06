@@ -124,11 +124,12 @@ pub fn dynaccess(input: TokenStream) -> TokenStream {
     let struct_name = ast.ident;
     
     let gen = quote!(
+        #[allow(unused_variables, non_upper_case_globals)]
         mod #mod_name {
             use super::#struct_name;
             
             impl ::dynaccess_traits::FieldAccessors for #struct_name {
-                fn set<F, V>(&mut self, field: F, value: V)
+               fn set<F, V>(&mut self, field: F, value: V)
                     where F: ::dynaccess_traits::Field<#struct_name, Type=V>,
                 {
                     F::set(self, value)
