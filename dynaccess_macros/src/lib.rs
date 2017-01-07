@@ -33,7 +33,7 @@
 //! }
 //! ```
 
-#![feature(proc_macro, proc_macro_lib)]
+//#![feature(proc_macro, proc_macro_lib)]
 #![recursion_limit = "1024"]
 
 extern crate proc_macro;
@@ -44,29 +44,116 @@ extern crate regex;
 
 use proc_macro::TokenStream;
 use regex::{Regex, Captures};
-use syn::{MetaItem, NestedMetaItem, Ident, Lit, Body, VariantData, Attribute};
+use syn::{
+    Attribute,
+    Body,
+    Field,
+    Ident,
+    IntTy,
+    Lit,
+    MacroInput,
+    MetaItem,
+    NestedMetaItem,
+    Ty,
+    VariantData,
+};
 
-
-fn create_field_items(input: &syn::MacroInput,
-                      field_attrs: &Vec<Attribute>,
-                      field: &syn::Field)
+// Generates AST for struct field
+fn create_field_items(config: &MacroConfig,
+                      field: &FieldInfo)
                       -> quote::Tokens
 {
+    let struct_ident = config.struct_ident.clone();
+    let field_struct_ident = field.struct_ident.clone();
+    let field_const_ident = field.const_ident.clone();
+    let field_type = field.ty.clone();
+    let field_ident = field.ident.clone();
+    
+    let mut field_attrs = config.global_attrs.clone();
+    let mut field_specific_attrs = field.attrs.clone();
+    field_attrs.append(&mut field_specific_attrs);
+    
+    quote!(
+        #( #field_attrs )*
+        pub struct #field_struct_ident;
+
+        pub const #field_const_ident: #field_struct_ident = #field_struct_ident;
+        
+        impl ::dynaccess_traits::Field<#struct_ident> for #field_struct_ident {
+            type Type = #field_type;
+            
+            fn get(s: &#struct_ident) -> &#field_type {
+                &s.#field_ident
+            }
+
+            fn get_mut(s: &mut #struct_ident) -> &mut #field_type {
+                &mut s.#field_ident
+            }
+
+            fn set(s: &mut #struct_ident, v: #field_type) {
+                s.#field_ident = v
+            }
+        }
+    )
+}
+
+// Searches attributes for `#[dynaccess(...)]` 
+fn filter_dynaccess_attrs<'a, I>(attrs: I) -> Box<Iterator<Item=syn::NestedMetaItem> + 'a>
+    where I: Iterator<Item=&'a Attribute> + 'a,
+{
+    Box::new(attrs.filter_map(|attr| {
+        if let MetaItem::List(ref ident, ref attrs) = attr.value {
+                if ident.to_string() == "dynaccess".to_string() {
+                    return Some(attrs.clone());
+                }
+            }
+        None
+    }).flat_map(|a| a))
+}
+
+#[derive(Clone)]
+struct FieldInfo {
+    attrs: Vec<Attribute>,
+    const_ident: Ident,
+    ident: Ident,
+    struct_ident: Ident,
+    ty: Ty,
+}
+
+struct MacroConfig {
+    fields: Vec<FieldInfo>,
+    global_attrs: Vec<Attribute>,
+    module_ident: Ident,
+    struct_ident: Ident,
+}
+
+// Extracts information of a struct field from AST
+// Performs ident case conversion
+fn parse_field(_: &MacroConfig, field: &Field) -> FieldInfo {
     lazy_static! {
         static ref REGEX_SNAKE_CASE: Regex = Regex::new("(?:^|_)(.)").unwrap();
     }
-    let struct_name = input.ident.clone();
+
     let field_name = field.ident.clone().unwrap().to_string();
-    let field_ident = field.ident.clone();
-    let field_type = field.ty.clone();
-    let mut field_attrs = field_attrs.clone();
-    
+    let camel_case = REGEX_SNAKE_CASE
+        .replace_all(field_name.as_str(),
+                     |captures: &Captures| {
+                         captures.get(1).unwrap().as_str()
+                             .to_string().to_uppercase()
+                     });
+
+    let struct_ident = Ident::from(format!("_{}", camel_case));
+    let const_ident = Ident::from(camel_case);
+    let ty = field.ty.clone();
+
     let iter = filter_dynaccess_attrs(field.attrs.iter())
         .filter_map(|item| match item {
             NestedMetaItem::MetaItem(item) => Some(item),
             _ => None,
         });
 
+    let mut field_attrs = vec![];
+    
     for attr in iter {
         match attr {
             MetaItem::List(ref name, ref attrs)
@@ -88,71 +175,36 @@ fn create_field_items(input: &syn::MacroInput,
             _ => ()
         }
     }
-
-    let field_name_camel_case = REGEX_SNAKE_CASE
-        .replace_all(field_name.as_str(),
-                 |captures: &Captures| {
-                     captures.get(1).unwrap().as_str()
-                         .to_string().to_uppercase()
-                 });
     
-    let field_struct_name = Ident::new(format!("_{}", field_name_camel_case));
-    let field_const_name = Ident::new(field_name_camel_case);
-    
-    quote!(
-        #( #field_attrs )*
-        pub struct #field_struct_name;
-
-        pub const #field_const_name: #field_struct_name = #field_struct_name;
-        
-        impl ::dynaccess_traits::Field<#struct_name> for #field_struct_name {
-            type Type = #field_type;
-            
-            fn get(s: &#struct_name) -> &#field_type {
-                &s.#field_ident
-            }
-
-            fn get_mut(s: &mut #struct_name) -> &mut #field_type {
-                &mut s.#field_ident
-            }
-
-            fn set(s: &mut #struct_name, v: #field_type) {
-                s.#field_ident = v
-            }
-        }
-    )
+    FieldInfo {
+        attrs: field_attrs,
+        const_ident: const_ident,
+        ident: field.ident.clone().unwrap(),
+        struct_ident: struct_ident,
+        ty: ty,
+    }
 }
 
-fn filter_dynaccess_attrs<'a, I>(attrs: I) -> Box<Iterator<Item=syn::NestedMetaItem> + 'a>
-    where I: Iterator<Item=&'a Attribute> + 'a,
-{
-    Box::new(attrs.filter_map(|attr| {
-        if let MetaItem::List(ref ident, ref attrs) = attr.value {
-                if ident.to_string() == "dynaccess".to_string() {
-                    return Some(attrs.clone());
-                }
-            }
-        None
-    }).flat_map(|a| a))
-}
+// Creates `MacroConfig` from `MacroInput`.
+// Extracts options and field information from the AST
+fn parse_macro_config(input: &MacroInput) -> MacroConfig {
+    let mut module_name = "field".to_string();
+    let mut global_attrs = vec![];
 
-#[proc_macro_derive(Dynaccess)]
-pub fn dynaccess(input: TokenStream) -> TokenStream {
-    let s = input.to_string();
-    let ast = syn::parse_macro_input(&s).expect("failed to parse macro input");
-
-    let attrs = filter_dynaccess_attrs(ast.attrs.iter());
-
-    let mut mod_name = "field".to_string();
-    let mut field_attrs = vec![];
+    // Get only attributes under #[dynaccess(...)]
+    let attrs = filter_dynaccess_attrs(input.attrs.iter());
     
+    // Parse attributes
     for attr in attrs {
         match attr {
+            // #[dynaccess(module = ...)]
             NestedMetaItem::MetaItem(MetaItem::NameValue(ref name, Lit::Str(ref value, _)))
                 if name.to_string() == "module".to_string() =>
             {
-                mod_name = value.to_string();
+                module_name = value.to_string();
             },
+
+            // #[dynaccess(field_attrs(...))]
             NestedMetaItem::MetaItem(MetaItem::List(ref name, ref attrs))
                 if name.to_string() == "field_attrs".to_string() =>
             {
@@ -169,50 +221,75 @@ pub fn dynaccess(input: TokenStream) -> TokenStream {
                     }
                 }).collect();
 
-                field_attrs.append(&mut new_attrs);
+                global_attrs.append(&mut new_attrs);
             },
             _ => ()
         }
     }
-    
-    let mod_name = Ident::new(mod_name);
-    
-    let field_gens = if let Body::Struct(VariantData::Struct(ref fields)) = ast.body {
-        fields.iter().map(|field| {
-            create_field_items(&ast, &field_attrs, field)
-        }).collect::<Vec<_>>()
-    } else {
-        panic!("#[derive(FieldModule)] is only defined for structs");
+
+    let mut config = MacroConfig {
+        module_ident: Ident::new(module_name),
+        struct_ident: input.ident.clone(),
+        global_attrs: global_attrs,
+        fields: vec![]
     };
 
-    let struct_name = ast.ident;
+    // Parse fields
+    if let Body::Struct(VariantData::Struct(ref fields)) = input.body {
+        config.fields = fields.iter()
+            .map(|field| parse_field(&config, field))
+            .collect();
+    } else {
+        panic!("#[derive(Dynaccess)] is only defined for structs")
+    }
+    
+    config
+}
+
+// The macro.
+#[proc_macro_derive(Dynaccess)]
+pub fn dynaccess(input: TokenStream) -> TokenStream {
+    let s = input.to_string();
+    let ast = syn::parse_macro_input(&s).expect("failed to parse macro input");
+
+    let config = parse_macro_config(&ast);
+
+    let module_ident = config.module_ident.clone();
+    let struct_ident = config.struct_ident.clone();
+
+    let field_count = Lit::Int(config.fields.len() as u64, IntTy::Usize);
+    let field_struct_idents = config.fields.iter()
+        .map(|field| field.struct_ident.clone());
+
+    let field_items = config.fields.iter()
+        .map(|field| create_field_items(&config, field));
     
     let gen = quote!(
         #[allow(unused_variables, non_upper_case_globals)]
-        mod #mod_name {
-            use super::#struct_name;
+        mod #module_ident {
+            use super::#struct_ident;
             
-            impl ::dynaccess_traits::FieldAccessors for #struct_name {
+            impl ::dynaccess_traits::FieldAccessors for #struct_ident {
                fn set<F, V>(&mut self, field: F, value: V)
-                    where F: ::dynaccess_traits::Field<#struct_name, Type=V>,
+                    where F: ::dynaccess_traits::Field<#struct_ident, Type=V>,
                 {
                     F::set(self, value)
                 }
 
                 fn get<F,V>(&self, field: F) -> &V
-                    where F: ::dynaccess_traits::Field<#struct_name, Type=V>,
+                    where F: ::dynaccess_traits::Field<#struct_ident, Type=V>,
                 {
                     F::get(self)
                 }
 
                 fn get_mut<F,V>(&mut self, field: F) -> &mut V
-                    where F: ::dynaccess_traits::Field<#struct_name, Type=V>,
+                    where F: ::dynaccess_traits::Field<#struct_ident, Type=V>,
                 {
                     F::get_mut(self)
                 }
             }
             
-            #( #field_gens )*
+            #( #field_items )*
         }
     );
 
